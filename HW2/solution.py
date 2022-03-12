@@ -178,6 +178,7 @@ def multinomial_bad_ordinal_good(n, rand):
 MBOG_TRAIN = 50
 
 if __name__ == "__main__":
+    rand = random.Random(0)
     
     print("Part 2")
     df = pd.read_csv("dataset.csv", delimiter=";")
@@ -199,17 +200,49 @@ if __name__ == "__main__":
     columns = X.columns
 
     X = X.to_numpy()
+    number_of_samples = len(X)
 
-    lr = MultinomialLogReg()
-    lr.build(X, y)
+    df_B = []
 
-    df_B = pd.DataFrame(np.concatenate((lr.B, [[p] for p in possible_outcomes]), axis = 1), columns = np.concatenate((columns, ["B_0", "possible_outcomes"])))
-    df_B = df_B.set_index("possible_outcomes")
+    for i in range(10):
+        print(i)
+        seq = list(range(number_of_samples))
+        samples_to_use_in_split = []
+        while len(samples_to_use_in_split) < number_of_samples:
+            newSample = rand.choice(seq)
+            samples_to_use_in_split.append(newSample)
+        bootstraped_X = X[samples_to_use_in_split, :]
+        bootstraped_y = y[samples_to_use_in_split]
+
+        lr = MultinomialLogReg()
+        lr.build(bootstraped_X, bootstraped_y)
+
+        df_B_i = pd.DataFrame(np.concatenate((lr.B, [[p] for p in np.unique(bootstraped_y.to_numpy())]), axis = 1), columns = np.concatenate((columns, ["B_0", "possible_outcomes"])))
+        df_B_i = df_B_i.set_index("possible_outcomes")
+        df_B.append(df_B_i)
+    
+    tab = []
+    for p in np.unique(y.to_numpy()):
+        vs = []
+        for df in df_B:
+            print(df.loc[[p]].values[0])
+            vs.append(df.loc[[p]].values[0])
+        vs = np.transpose(np.array(vs))
+        print(vs)
+        mean_vs = np.array([np.mean(v.astype(np.float)) for v in vs])
+        se_vs = np.array([np.std(v.astype(np.float)) for v in vs])
+
+        row = []
+        for m, s in zip(mean_vs, se_vs):
+            row.append(f"{round(m, 2)} +/- {round(s, 2)}")
+        row.append(p)
+        tab.append(row)
+
+    df_B = pd.DataFrame(tab, columns = np.concatenate((columns, ["B_0", "possible_outcomes"]))).round(2)
     df_B.to_csv("part_2_betas.csv")
     print("Saved B to file")
 
     print("Part 3")
-    rand = random.Random(0)
     X, y = multinomial_bad_ordinal_good(MBOG_TRAIN + 1000, rand)
     X_train, X_test, y_train, y_test = train_test_split(X, y, shuffle = True, test_size=1000, random_state=42)
 
