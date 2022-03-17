@@ -17,8 +17,7 @@ class MultinomialLogReg:
         self.X_e = np.concatenate((self.X, [[1]] * len(self.X)), axis=1)
         self.y = y
 
-        self.possible_outcomes = np.unique(y)
-        m = len(self.possible_outcomes)
+        m = len(np.unique(y))
         self.m = m
 
         self.number_of_columns = len(X[0])
@@ -41,8 +40,8 @@ class MultinomialLogReg:
         prob = []
         for x_i in X:
             x_i_e = np.concatenate((x_i, [1]))
-            N = np.sum([np.exp(-np.dot(b, x_i_e)) for b in self.B])
-            prob_x_i = [np.exp(-np.dot(b, x_i_e)) / N for b in self.B]
+            N = np.sum([np.exp(np.dot(b, x_i_e)) for b in self.B])
+            prob_x_i = [np.exp(np.dot(b, x_i_e)) / N for b in self.B]
             prob.append(prob_x_i)
         prob = np.array(prob)
 
@@ -54,13 +53,11 @@ class MultinomialLogReg:
         B = np.concatenate((B, [0] * (self.number_of_columns + 1)), axis=0)
         B = B.reshape((self.m, self.number_of_columns + 1))
 
-        values = -np.dot(self.X_e, np.transpose(B))
+        values = np.dot(self.X_e, np.transpose(B))
         exp_values = np.exp(values)
         Ns = np.sum(exp_values, axis=1)
-        mask = np.transpose(
-            [self.y == self.possible_outcomes[j] for j in range(len(B))]
-        )
-        Ns[Ns == 0] += 0.000001
+        mask = np.transpose([self.y == j for j in range(len(B))])
+        
         log_exp_values = exp_values[mask] / (Ns)
         loss = np.sum(np.log(log_exp_values))
 
@@ -145,12 +142,10 @@ class OrdinalLogReg:
 
         loss = 0
 
-        possible_y = list(np.unique(self.y))
-
         for x_i, y_i in zip(self.X, self.y):
             x_i_e = np.concatenate((x_i, [1]))
             u_i = np.dot(B, x_i_e)
-            j = possible_y.index(y_i) + 1
+            j = y_i + 1
             loss += np.log(
                 self.cdf_standard_logistic_d(t[j] - u_i)
                 - self.cdf_standard_logistic_d(t[j - 1] - u_i)
@@ -182,11 +177,18 @@ if __name__ == "__main__":
     
     print("Part 2")
     df = pd.read_csv("dataset.csv", delimiter=";")
+    df["ShotType"] = df["ShotType"].map({'above head':0,
+                             'dunk':1,
+                             'hook shot':2,
+                             'layup':3,
+                             'other':5,
+                             'tip-in':4},
+                             na_action=None)
     X = df.loc[:, df.columns != 'ShotType']
-    y = df["ShotType"]
+    y = np.array([v[0] for v in df[["ShotType"]].to_numpy()])
+    
     X = pd.get_dummies(X, columns = ['Competition', 'PlayerType', 'Movement'], drop_first=True)
 
-    possible_outcomes = np.unique(y.to_numpy())
 
     def normalize(X_train, column):
         u = np.mean(X_train[column])
@@ -204,42 +206,83 @@ if __name__ == "__main__":
 
     df_B = []
 
+    oob_CAs = []
     for i in range(10):
-        print(i)
         seq = list(range(number_of_samples))
         samples_to_use_in_split = []
+        out_of_bag_samples = list(range(len(X)))
         while len(samples_to_use_in_split) < number_of_samples:
             newSample = rand.choice(seq)
             samples_to_use_in_split.append(newSample)
+            if newSample in out_of_bag_samples:
+                out_of_bag_samples.remove(newSample)
         bootstraped_X = X[samples_to_use_in_split, :]
         bootstraped_y = y[samples_to_use_in_split]
+        oob_X = X[out_of_bag_samples, :]
+        oob_y = y[out_of_bag_samples]
 
         lr = MultinomialLogReg()
         lr.build(bootstraped_X, bootstraped_y)
 
-        df_B_i = pd.DataFrame(np.concatenate((lr.B, [[p] for p in np.unique(bootstraped_y.to_numpy())]), axis = 1), columns = np.concatenate((columns, ["B_0", "possible_outcomes"])))
+        oob_pred = lr.predict(oob_X)
+        oof_CA = np.average(oob_pred.argmax(axis=1) == oob_y)
+        print("CA out of bag:", oof_CA)
+        oob_CAs.append(oof_CA)
+
+        df_B_i = pd.DataFrame(np.concatenate((lr.B, [[p] for p in range(6)]), axis = 1), columns = np.concatenate((columns, ["B_0", "possible_outcomes"])))
         df_B_i = df_B_i.set_index("possible_outcomes")
         df_B.append(df_B_i)
     
+    boo_df_B = df_B
+    print("Average oob CA", np.mean(oob_CAs), "+/-", np.std(oob_CAs))
     tab = []
-    for p in np.unique(y.to_numpy()):
+    for p in range(6):
         vs = []
-        for df in df_B:
-            print(df.loc[[p]].values[0])
+        for df in boo_df_B:
             vs.append(df.loc[[p]].values[0])
         vs = np.transpose(np.array(vs))
-        print(vs)
-        mean_vs = np.array([np.mean(v.astype(np.float)) for v in vs])
-        se_vs = np.array([np.std(v.astype(np.float)) for v in vs])
+        mean_vs = np.array([np.mean(v.astype(np.float64)) for v in vs])
+        se_vs = np.array([np.std(v.astype(np.float64)) for v in vs])
 
         row = []
         for m, s in zip(mean_vs, se_vs):
-            row.append(f"{round(m, 2)} +/- {round(s, 2)}")
+            row.append(f"{round(m, 2)}")
         row.append(p)
         tab.append(row)
 
-    df_B = pd.DataFrame(tab, columns = np.concatenate((columns, ["B_0", "possible_outcomes"]))).round(2)
+    df_B = pd.DataFrame(tab, columns = np.concatenate((columns, ["B_0", "ShotType"]))).round(2)
+    df_B["ShotType"] = df_B["ShotType"].map({0:'above head',
+                             1:'dunk',
+                             2:'hook shot',
+                             3:'layup',
+                             5:'other',
+                             4:'tip-in'},
+                             na_action=None)
     df_B.to_csv("part_2_betas.csv")
+    tab = []
+    for p in range(6):
+        vs = []
+        for df in boo_df_B:
+            vs.append(df.loc[[p]].values[0])
+        vs = np.transpose(np.array(vs))
+        mean_vs = np.array([np.mean(v.astype(np.float64)) for v in vs])
+        se_vs = np.array([np.std(v.astype(np.float64)) for v in vs])
+
+        row = []
+        for m, s in zip(mean_vs, se_vs):
+            row.append(f"{round(m, 2)} +/- {round(2 * s, 2)}")
+        row.append(p)
+        tab.append(row)
+
+    df_B = pd.DataFrame(tab, columns = np.concatenate((columns, ["B_0", "ShotType"]))).round(2)
+    df_B["ShotType"] = df_B["ShotType"].map({0:'above head',
+                             1:'dunk',
+                             2:'hook shot',
+                             3:'layup',
+                             5:'other',
+                             4:'tip-in'},
+                             na_action=None)
+    df_B.to_csv("part_2_betas_with_uncertainty.csv")
     print("Saved B to file")
 
     print("Part 3")
