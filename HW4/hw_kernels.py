@@ -52,35 +52,43 @@ class SVR:
     def get_b(self):
         return self.b
 
+    def is_pos_def(self, x):
+        print(np.linalg.eigvals(x))
+        return np.all(np.linalg.eigvals(x) > 0)
+
     def fit(self, X, y):
         self.X = X
         self.number_of_instances = len(X)
         l = self.number_of_instances
 
-        A = matrix([1.0, -1.0] * l, (1, l*2))
-        P = matrix([[matrix([[self.kernel(X[row], X[col]), -self.kernel(X[row], X[col])], [-self.kernel(X[row], X[col]), self.kernel(X[row], X[col])]])  for col in range(l)]for row in range(l)])
+        A = np.array([[1.0, -1.0] * l])
+        A_ = matrix([1.0, -1.0] * l, (1, l*2))
+        help_mtx1 = np.zeros((2*l, l))
+        for i,j in zip(range(0, 2*l, 2), range(l)):
+            help_mtx1[i:i+2, j]=np.array([1, -1])
+        P = np.linalg.multi_dot((help_mtx1, self.kernel(self.X, self.X), help_mtx1.T))
+        P_ = matrix(P)
 
-        Qinside = []
-        for i in range(2*l):
-            Qinside.append(list(np.concatenate((np.concatenate((np.zeros((1, i)), [[1]]), axis = 1), np.zeros((1, 2*l - i - 1))), axis = 1)[0]))
-            Qinside.append(list(np.concatenate((np.concatenate((np.zeros((1, i)), [[-1]]), axis = 1), np.zeros((1, 2*l - i - 1))), axis = 1)[0]))
-        Qinside = list(np.transpose(Qinside))
-        for i in range(len(Qinside)):
-            Qinside[i] = list(Qinside[i])
+        G = np.zeros((4*l, 2*l))
+        G[:2*l, :]= np.eye(2*l)
+        G[2*l: , :]= -1*np.eye(2*l)
             
-        G = matrix(Qinside)
+        G_ = matrix(G)
 
-        hinside = []
-        for i in range(2*l):
-            hinside.append(self.C)
-            hinside.append(0)
-        h = matrix(hinside)
+        h = np.zeros(4*l)
+        h[:2*l]=np.ones(2*l) * self.C
+        h_ = matrix(h)
         b = matrix([0.0])
-
         q = matrix([matrix([self.eps - y[i], self.eps + y[i]]) for i in range(l)])
 
+        #print("P is PD", self.is_pos_def(P))
+        #print("rank", np.linalg.matrix_rank(A), len(A))
+        #print(P.shape, A.shape, G.shape)
+        #first = np.concatenate((A, G), axis = 0)
+        #print("rank", np.linalg.matrix_rank(np.concatenate((P, first), axis = 0)), 2*l)
 
-        sol = solvers.qp(P = P, q = q, A = A, b = b, G = G, h = h)
+        solvers.options['show_progress']=False
+        sol = solvers.qp(P = P_, q = q, A = A_, b = b, G = G_, h = h_)
 
         self.alpha = sol['x']
 
