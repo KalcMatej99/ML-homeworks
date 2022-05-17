@@ -16,8 +16,9 @@ class MultinomialLogReg:
         self.X = X
         self.X_e = np.concatenate((self.X, [[1]] * len(self.X)), axis=1)
         self.y = y
+        self.possible_outcomes = np.unique(self.y)
 
-        m = len(np.unique(y))
+        m = len(self.possible_outcomes)
         self.m = m
 
         self.number_of_columns = len(X[0])
@@ -40,26 +41,25 @@ class MultinomialLogReg:
         prob = []
         for x_i in X:
             x_i_e = np.concatenate((x_i, [1]))
-            N = np.sum([np.exp(np.dot(b, x_i_e)) for b in self.B])
+            N = np.sum([np.exp(np.dot(b, x_i_e).astype(np.float128)) for b in self.B])
             prob_x_i = [np.exp(np.dot(b, x_i_e)) / N for b in self.B]
             prob.append(prob_x_i)
         prob = np.array(prob)
 
         return prob
 
-    def loglikelihood(self, params):
+    def loglikelihood(self, B):
 
-        B = params
         B = np.concatenate((B, [0] * (self.number_of_columns + 1)), axis=0)
         B = B.reshape((self.m, self.number_of_columns + 1))
 
         values = np.dot(self.X_e, np.transpose(B))
         exp_values = np.exp(values)
+        exp_values = np.nan_to_num(exp_values, posinf=999999)
         Ns = np.sum(exp_values, axis=1)
-        mask = np.transpose([self.y == j for j in range(len(B))])
-        print(exp_values[mask].shape, Ns.shape)
-        log_exp_values = exp_values[mask] / (Ns)
-        loss = np.sum(np.log(log_exp_values))
+        mask = np.transpose([self.y == self.possible_outcomes[j] for j in range(len(B))])
+        
+        loss = np.sum(values[mask] - np.log(Ns))
 
         if -loss < self.best_log_score:
             self.best_log_score = -loss
