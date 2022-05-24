@@ -15,6 +15,7 @@ class HW6Tests(unittest.TestCase):
         self.y = np.array([0, 1, 2, 3])
         self.hard_y = np.array([0, 1, 1, 0])
     
+    
     def test_ann_classification_no_hidden_layer(self):
         fitter = ANNClassification(units=[], lambda_=0.0001)
         m = fitter.fit(self.X, self.y)
@@ -37,7 +38,7 @@ class HW6Tests(unittest.TestCase):
         pred = m.predict(self.X)
         self.assertEqual(pred.shape, (4, 2))
         np.testing.assert_allclose(pred, [[1, 0], [0, 1], [0, 1], [1, 0]], atol=0.01)
-
+    
     def test_ann_classification_hidden_layers_hard(self):
         # two hidden layers
         fitter = ANNClassification(units=[10, 20], lambda_=0.0001)
@@ -53,6 +54,7 @@ class HW6Tests(unittest.TestCase):
         self.assertEqual(pred.shape, (4,))
         np.testing.assert_allclose(pred, self.y, atol=0.01)
     
+    
     def test_ann_regression_no_hidden_layer_hard(self):
         # aiming to solve a non linear problem without hidden layers
         fitter = ANNRegression(units=[], lambda_=0.0001)
@@ -60,7 +62,7 @@ class HW6Tests(unittest.TestCase):
         pred = m.predict(self.X)
         self.assertEqual(pred.shape, (4,))
         np.testing.assert_allclose(pred, 0.5, atol=0.01)
-
+    
     def test_ann_regression_hidden_layer_hard(self):
         # one hidden layer
         fitter = ANNRegression(units=[10], lambda_=0.0001)
